@@ -1,11 +1,11 @@
-use std::{collections::VecDeque, env, io::Read};
+use std::{collections::VecDeque, env, io::Read, sync::mpsc, thread, time::Duration};
 
 use ndarray::{Array2, array};
 use rand::prelude::*;
 
 type Position = (usize, usize);
 
-fn pathplan(grid: &Array2<i32>, t: i32, start_pos: Position) -> (usize, i32, Position) {
+fn pathplan(grid: &Array2<i32>, t: i32, start_pos: Position) -> Result<(usize, i32, Position), ()> {
     let mut grid = grid.clone();
 
     let n = grid.shape()[0];
@@ -22,7 +22,7 @@ fn pathplan(grid: &Array2<i32>, t: i32, start_pos: Position) -> (usize, i32, Pos
     for _ in 0..t {
         grid[current_pos] += 1;
 
-        println!("Current pos is now: {:?}", current_pos);
+        println!("Drone pos is now: {:?}", current_pos);
 
         let (x, y) = current_pos;
         let neighbors = [
@@ -59,10 +59,36 @@ fn pathplan(grid: &Array2<i32>, t: i32, start_pos: Position) -> (usize, i32, Pos
         current_step += 1;
         current_pos = lowest_neighbor;
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        // NOTE: Simulating additional CPU time
+        std::thread::sleep(std::time::Duration::from_millis(1_000));
     }
 
-    (current_step, current_cost, current_pos)
+    Ok((current_step, current_cost, current_pos))
+}
+
+fn run_pathplan_with_timeout(
+    grid: &Array2<i32>,
+    t: i32,
+    start_pos: Position,
+    timeout_ms: u64,
+) -> Option<Result<(usize, i32, Position), ()>> {
+    let grid_clone = grid.clone();
+
+    let (tx, rx) = mpsc::channel();
+
+    let handle = thread::spawn(move || {
+        let result = pathplan(&grid_clone, t, start_pos);
+        let _ = tx.send(result);
+        result
+    });
+
+    match rx.recv_timeout(Duration::from_millis(timeout_ms)) {
+        Ok(result) => Some(result),
+        Err(_) => {
+            handle.join().ok();
+            None
+        }
+    }
 }
 
 fn grid_from_file<P: AsRef<std::path::Path>>(p: P) -> std::io::Result<Array2<i32>> {
@@ -115,8 +141,16 @@ fn main() {
     };
 
     let start_pos = (1, 2);
-    let (fin_step, fin_cost, fin_pos) = pathplan(&grid, 7, start_pos);
+    let time_steps = 7;
+    let timeout_ms = 5_000; // 5s
 
-    println!("Cost after {} iterations: {}", fin_step, fin_cost);
-    println!("Position after {} iterations: {:?}", fin_step, fin_pos);
+    match run_pathplan_with_timeout(&grid, time_steps, start_pos, timeout_ms) {
+        Some(Ok((fin_step, fin_cost, fin_pos))) => {
+            println!("Cost after {} iterations: {}", fin_step, fin_cost);
+            println!("Position after {} iterations: {:?}", fin_step, fin_pos);
+        }
+        _ => {
+            println!("Pathplan did not complete within the time limit");
+        }
+    }
 }
