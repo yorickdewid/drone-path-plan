@@ -1,12 +1,7 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, env, io::Read};
 
 use ndarray::{Array2, array};
 use rand::prelude::*;
-
-// - N: Grootte van het te doorzoeken grid: N x N.
-// - t: Totaal aantal discrete tijdstappen
-// - T: Maximale tijdsduur van het algoritme in milliseconden.
-// - (x, y): Index van startpositie van de drone
 
 type Position = (usize, usize);
 
@@ -70,14 +65,54 @@ fn pathplan(grid: &Array2<i32>, t: i32, start_pos: Position) -> (usize, i32, Pos
     (current_step, current_cost, current_pos)
 }
 
+fn grid_from_file<P: AsRef<std::path::Path>>(p: P) -> std::io::Result<Array2<i32>> {
+    let mut grid_file = std::fs::File::open(p)?;
+
+    // NOTE: IRL we would never commit an entire file to memory like this
+    let mut s = String::new();
+    grid_file.read_to_string(&mut s)?;
+
+    let lines: Vec<&str> = s.trim().lines().collect();
+
+    let rows = lines.len();
+    let cols = lines
+        .get(0)
+        .map_or(0, |line| line.split_whitespace().count());
+
+    if rows == 0 || cols == 0 {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "empty grid",
+        ))?;
+    }
+
+    let mut grid = Array2::zeros((rows, cols));
+
+    for (i, line) in lines.iter().enumerate() {
+        for (j, val) in line.split_whitespace().enumerate() {
+            if j < cols {
+                grid[[i, j]] = val.parse::<i32>().unwrap_or(0);
+            }
+        }
+    }
+
+    Ok(grid)
+}
+
 fn main() {
-    let grid = array![
-        [01, 05, 05, 02, 05],
-        [01, 02, 03, 04, 02],
-        [03, 01, 00, 04, 00],
-        [09, 05, 01, 06, 01],
-        [00, 02, 06, 01, 03]
-    ];
+    let args: Vec<String> = env::args().collect();
+
+    let grid = if args.len() > 1 {
+        grid_from_file(&args[1]).expect("failed to read grid from file")
+    } else {
+        array![
+            [01, 05, 05, 02, 05],
+            [01, 02, 03, 04, 02],
+            [03, 01, 00, 04, 00],
+            [09, 05, 01, 06, 01],
+            [00, 02, 06, 01, 03]
+        ]
+    };
 
     let start_pos = (1, 2);
     let (fin_step, fin_cost, fin_pos) = pathplan(&grid, 7, start_pos);
