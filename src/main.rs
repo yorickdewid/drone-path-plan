@@ -5,7 +5,12 @@ use rand::prelude::*;
 
 type Position = (usize, usize);
 
-fn pathplan(grid: &Array2<i32>, t: i32, start_pos: Position) -> Result<(usize, i32, Position), ()> {
+fn pathplan(
+    grid: &Array2<i32>,
+    t: i32,
+    start_pos: Position,
+    cancel_rx: mpsc::Receiver<()>,
+) -> (usize, i32, Position) {
     let mut grid = grid.clone();
 
     let n = grid.shape()[0];
@@ -20,6 +25,10 @@ fn pathplan(grid: &Array2<i32>, t: i32, start_pos: Position) -> Result<(usize, i
     trail.push_back(current_pos);
 
     for _ in 0..t {
+        if cancel_rx.try_recv().is_ok() {
+            break;
+        }
+
         grid[current_pos] += 1;
 
         println!("Drone pos is now: {:?}", current_pos);
@@ -63,7 +72,7 @@ fn pathplan(grid: &Array2<i32>, t: i32, start_pos: Position) -> Result<(usize, i
         std::thread::sleep(std::time::Duration::from_millis(1_000));
     }
 
-    Ok((current_step, current_cost, current_pos))
+    (current_step, current_cost, current_pos)
 }
 
 fn run_pathplan_with_timeout(
@@ -71,24 +80,31 @@ fn run_pathplan_with_timeout(
     t: i32,
     start_pos: Position,
     timeout_ms: u64,
-) -> Option<Result<(usize, i32, Position), ()>> {
+) -> Option<(usize, i32, Position)> {
     let grid_clone = grid.clone();
 
     let (tx, rx) = mpsc::channel();
+    let (cancel_tx, cancel_rx) = mpsc::channel();
 
     let handle = thread::spawn(move || {
-        let result = pathplan(&grid_clone, t, start_pos);
+        let result = pathplan(&grid_clone, t, start_pos, cancel_rx);
         let _ = tx.send(result);
         result
     });
 
-    match rx.recv_timeout(Duration::from_millis(timeout_ms)) {
+    let result = match rx.recv_timeout(Duration::from_millis(timeout_ms)) {
         Ok(result) => Some(result),
         Err(_) => {
-            handle.join().ok();
-            None
+            cancel_tx.send(()).ok();
+
+            match handle.join() {
+                Ok(result) => Some(result),
+                Err(_) => None,
+            }
         }
-    }
+    };
+
+    result
 }
 
 fn grid_from_file<P: AsRef<std::path::Path>>(p: P) -> std::io::Result<Array2<i32>> {
@@ -141,11 +157,11 @@ fn main() {
     };
 
     let start_pos = (1, 2);
-    let time_steps = 7;
+    let time_steps = 27;
     let timeout_ms = 5_000; // 5s
 
     match run_pathplan_with_timeout(&grid, time_steps, start_pos, timeout_ms) {
-        Some(Ok((fin_step, fin_cost, fin_pos))) => {
+        Some((fin_step, fin_cost, fin_pos)) => {
             println!("Cost after {} iterations: {}", fin_step, fin_cost);
             println!("Position after {} iterations: {:?}", fin_step, fin_pos);
         }
