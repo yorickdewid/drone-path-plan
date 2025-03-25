@@ -3,6 +3,8 @@ use std::{collections::VecDeque, env, io::Read, sync::mpsc, thread, time::Durati
 use ndarray::{Array2, array};
 use rand::prelude::*;
 
+const TRAIL_LENGTH: usize = 3;
+
 type Position = (usize, usize);
 
 fn pathplan(
@@ -14,8 +16,6 @@ fn pathplan(
     let mut grid = grid.clone();
 
     let n = grid.shape()[0];
-
-    let mut rng = rand::rng();
 
     let mut current_cost = 0;
     let mut current_step = 0;
@@ -50,20 +50,27 @@ fn pathplan(
 
         assert!(!neighbors.is_empty());
 
-        let valid_neighbors: Vec<_> = neighbors
-            .iter()
-            .filter(|&&pos| pos != current_pos && !trail.contains(&pos))
-            .collect();
+        // There is a 1/10 chance we pick a random neighbor. This prevents the drone from being stuck in a local minimum
+        let valid_neighbors: Vec<_> = if rand::random_ratio(1, 10) {
+            vec![]
+        } else {
+            neighbors
+                .iter()
+                .filter(|&&pos| pos != current_pos && !trail.contains(&pos))
+                .collect()
+        };
         let lowest_neighbor = match valid_neighbors.iter().min_by_key(|&&&pos| grid[pos]) {
             Some(neighbor) => **neighbor,
             None => neighbors
                 .iter()
-                .choose(&mut rng)
+                .choose(&mut rand::rng())
                 .map_or(current_pos, |&n| n),
         };
 
         trail.push_back(current_pos);
-        trail.pop_front();
+        if trail.len() > TRAIL_LENGTH {
+            trail.pop_front();
+        }
         current_cost += grid[lowest_neighbor];
         current_step += 1;
         current_pos = lowest_neighbor;
@@ -122,6 +129,7 @@ fn grid_from_file<P: AsRef<std::path::Path>>(p: P) -> std::io::Result<Array2<i32
         .map_or(0, |line| line.split_whitespace().count());
 
     if rows == 0 || cols == 0 {
+        // TODO: Empty grid is not really an IO error, but works for now
         Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "empty grid",
@@ -129,7 +137,6 @@ fn grid_from_file<P: AsRef<std::path::Path>>(p: P) -> std::io::Result<Array2<i32
     }
 
     let mut grid = Array2::zeros((rows, cols));
-
     for (i, line) in lines.iter().enumerate() {
         for (j, val) in line.split_whitespace().enumerate() {
             if j < cols {
@@ -174,7 +181,7 @@ fn main() {
             println!("Position after {} iterations: {:?}", fin_step, fin_pos);
         }
         _ => {
-            println!("Pathplan did not complete within the time limit");
+            eprintln!("pathplan thread failed execution");
         }
     }
 }
