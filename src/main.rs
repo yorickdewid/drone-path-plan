@@ -16,7 +16,8 @@ fn pathplan(
 ) -> (usize, i32, Position) {
     let mut grid = grid.clone();
 
-    let n = grid.shape()[0]; // TODO: Grid may not be a square
+    let nx = grid.shape()[0];
+    let ny = grid.shape()[1];
 
     let mut current_cost = 0;
     let mut current_step = 0;
@@ -38,14 +39,14 @@ fn pathplan(
         let neighbors = [
             (x.saturating_sub(1), y.saturating_sub(1)),
             (x.saturating_sub(1), y),
-            (x.saturating_sub(1), y.saturating_add(1).min(n - 1)),
+            (x.saturating_sub(1), y.saturating_add(1).min(ny - 1)),
             (x, y.saturating_sub(1)),
-            (x, y.saturating_add(1).min(n - 1)),
-            (x.saturating_add(1).min(n - 1), y.saturating_sub(1)),
-            (x.saturating_add(1).min(n - 1), y),
+            (x, y.saturating_add(1).min(ny - 1)),
+            (x.saturating_add(1).min(nx - 1), y.saturating_sub(1)),
+            (x.saturating_add(1).min(nx - 1), y),
             (
-                x.saturating_add(1).min(n - 1),
-                y.saturating_add(1).min(n - 1),
+                x.saturating_add(1).min(nx - 1),
+                y.saturating_add(1).min(nx - 1),
             ),
         ];
 
