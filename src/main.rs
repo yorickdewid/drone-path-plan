@@ -145,6 +145,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     let grid = if args.len() > 1 {
+        println!("Loading grid from file {}", args[1]);
         grid_from_file(&args[1]).expect("failed to read grid from file")
     } else {
         array![
@@ -156,9 +157,16 @@ fn main() {
         ]
     };
 
-    let start_pos = (1, 2);
+    let rand_x = rand::random_range(..grid.shape()[0]);
+    let rand_y = rand::random_range(..grid.shape()[1]);
+
+    let start_pos = (rand_x, rand_y); // Or use any tuple like (1, 2)
     let time_steps = 27;
-    let timeout_ms = 5_000; // 5s
+    let timeout_ms = 5_000;
+
+    println!("Drome start pos: {:?}", start_pos);
+    println!("Algo steps: {}", time_steps);
+    println!("Algo timeout: {}ms", timeout_ms);
 
     match run_pathplan_with_timeout(&grid, time_steps, start_pos, timeout_ms) {
         Some((fin_step, fin_cost, fin_pos)) => {
