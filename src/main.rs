@@ -4,6 +4,7 @@ use ndarray::{Array2, array};
 use rand::prelude::*;
 
 const TRAIL_LENGTH: usize = 3;
+const SIMULATION_TIME: u64 = 1_000;
 
 type Position = (usize, usize);
 
@@ -15,7 +16,7 @@ fn pathplan(
 ) -> (usize, i32, Position) {
     let mut grid = grid.clone();
 
-    let n = grid.shape()[0];
+    let n = grid.shape()[0]; // TODO: Grid may not be a square
 
     let mut current_cost = 0;
     let mut current_step = 0;
@@ -63,8 +64,8 @@ fn pathplan(
             Some(neighbor) => **neighbor,
             None => neighbors
                 .iter()
-                .choose(&mut rand::rng())
-                .map_or(current_pos, |&n| n),
+                .choose(&mut rand::rng()) // FUTURE: The thread RNG is initialized every time, provide reference
+                .map_or(current_pos, |&n| n), // TODO: There is a non-zero chance the drone gets stuck here
         };
 
         trail.push_back(current_pos);
@@ -76,7 +77,9 @@ fn pathplan(
         current_pos = lowest_neighbor;
 
         // NOTE: Simulating additional CPU time
-        std::thread::sleep(std::time::Duration::from_millis(1_000));
+        if SIMULATION_TIME > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(SIMULATION_TIME));
+        }
     }
 
     (current_step, current_cost, current_pos)
@@ -171,9 +174,9 @@ fn main() {
     let time_steps = 27;
     let timeout_ms = 5_000;
 
-    println!("Drome start pos: {:?}", start_pos);
-    println!("Algo steps: {}", time_steps);
-    println!("Algo timeout: {}ms", timeout_ms);
+    println!("Drone start pos: {:?}", start_pos);
+    println!(" - Algo steps: {}", time_steps);
+    println!(" - Algo timeout: {}ms", timeout_ms);
 
     match run_pathplan_with_timeout(&grid, time_steps, start_pos, timeout_ms) {
         Some((fin_step, fin_cost, fin_pos)) => {
