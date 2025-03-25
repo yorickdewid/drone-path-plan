@@ -10,6 +10,18 @@ A simple drone path planning simulator that finds efficient paths through a grid
 - Random starting positions
 - Support for loading custom grid maps from files
 
+## Build
+
+To build the project:
+
+```bash
+# Clone into repository
+cd path-plan
+
+# Build the project
+cargo build --release
+```
+
 ## Usage
 
 Build and run the project with Cargo:
